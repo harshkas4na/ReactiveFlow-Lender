@@ -70,9 +70,9 @@ const RepayTab = () => {
         const totalDue = await DestinationContract.methods.calculateTotalDue(account).call();
         console.log('Total due:', totalDue);
 
-        const amountEther = web3.utils.fromWei(amount.toString(), 'ether');
-        const repaidAmountEther = web3.utils.fromWei(repaidAmount.toString(), 'ether');
-        const totalDueEther = web3.utils.fromWei(totalDue.toString(), 'ether');
+        const amountEther = web3.utils.fromWei(Number(amount).toString(), 'ether');
+        const repaidAmountEther = web3.utils.fromWei(Number(repaidAmount).toString(), 'ether');
+        const totalDueEther = web3.utils.fromWei(Number(totalDue).toString(), 'ether');
         
         const progress = amount === '0' ? 0 : 
           (Number(repaidAmount) * 100 / Number(amount));
