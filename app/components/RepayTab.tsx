@@ -47,40 +47,55 @@ const RepayTab = () => {
         console.log('Missing requirements:', { account, hasContract: !!DestinationContract });
         return;
       }
-
-      const loanDetails: ContractLoanDetails = await DestinationContract.methods.getLoanDetails(account).call();
+  
+      const loanDetails = await DestinationContract.methods.getLoanDetails(account).call();
       console.log('Raw loan details:', loanDetails);
-
-      const [amount, repaidAmount, interestRate, dueDate, creditScore, active, funded] = [
-        loanDetails[0],
-        loanDetails[1],
-        loanDetails[2],
-        loanDetails[3],
-        loanDetails[4],
-        loanDetails[5],
-        loanDetails[6]
-      ];
-
-      if (!amount || !repaidAmount || !interestRate || !dueDate) {
-        console.error('Missing required loan details');
-        throw new Error('Invalid loan details structure');
+  
+      // Validate loan details existence
+      if (!loanDetails) {
+        console.log('No loan details returned');
+        setActiveLoans([]);
+        return;
       }
-
+  
+      // Extract values using array indices
+      const amount = loanDetails['0'] || '0';
+      const repaidAmount = loanDetails['1'] || '0';
+      const interestRate = loanDetails['2'] || '0';
+      const dueDate = loanDetails['3'] || '0';
+      const creditScore = loanDetails['4'] || '0';
+      const active = loanDetails['5'] || false;
+      const funded = loanDetails['6'] || false;
+  
+      console.log('Parsed values:', {
+        amount,
+        repaidAmount,
+        interestRate,
+        dueDate,
+        creditScore,
+        active,
+        funded
+      });
+  
       if (active && funded) {
+        // Get total due amount
         const totalDue = await DestinationContract.methods.calculateTotalDue(account).call();
         console.log('Total due:', totalDue);
-
+  
+        // Convert Wei to Ether for display
         const amountEther = web3.utils.fromWei(Number(amount).toString(), 'ether');
         const repaidAmountEther = web3.utils.fromWei(Number(repaidAmount).toString(), 'ether');
         const totalDueEther = web3.utils.fromWei(Number(totalDue).toString(), 'ether');
         
-        const progress = amount === '0' ? 0 : 
+        // Calculate progress
+        const progress = Number(amount) === 0 ? 0 : 
           (Number(repaidAmount) * 100 / Number(amount));
-
+  
+        // Convert timestamp to date
         const dueDateTimestamp = Number(dueDate) * 1000;
         const isOverdue = Date.now() > dueDateTimestamp;
-
-        setActiveLoans([{
+  
+        const loanData: LoanDetails = {
           id: 1,
           amount: Number(amountEther).toFixed(4),
           repaidAmount: Number(repaidAmountEther).toFixed(4),
@@ -89,7 +104,10 @@ const RepayTab = () => {
           dueDate: new Date(dueDateTimestamp).toLocaleDateString(),
           progress: Math.min(Math.round(progress), 100),
           status: isOverdue ? 'Overdue' : 'Active'
-        }]);
+        };
+  
+        console.log('Processed loan data:', loanData);
+        setActiveLoans([loanData]);
       } else {
         console.log('No active loans found');
         setActiveLoans([]);
