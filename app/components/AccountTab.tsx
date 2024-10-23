@@ -44,12 +44,12 @@ const AccountTab = () => {
 
   const getTransactionLink = (tx: Transaction): string => {
     if (tx.chain === 'sepolia') {
-      if (tx.type === 'releaseCollateral') {
+      if (tx.type === 'Release Collateral') {
         return `https://sepolia.etherscan.io/tx/${tx.txHash}`;
       }
       return `https://sepolia.etherscan.io/tx/${tx.txHash}`;
     } else {
-      if (tx.type === 'repayLoan') {
+      if (tx.type === 'Repay') {
         return `https://kopli.reactscan.net/tx/${tx.txHash}`;
       }
       return `https://kopli.reactscan.net/tx/${tx.txHash}`;

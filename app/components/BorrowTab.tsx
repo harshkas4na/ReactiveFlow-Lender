@@ -1,4 +1,3 @@
-"use client";
 import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,7 @@ import LoanRequestModal from './LoanRequestModal';
 import { useWeb3 } from '../contexts/Web3Contexts';
 import Web3 from 'web3';
 import TransactionStore from '../utils/transactionHistory';
+import { Contract, ContractAbi } from 'web3';
 
 interface LoanDetails {
   active: boolean;
@@ -21,22 +21,35 @@ interface LoanDetails {
   duration: number;
   paidCollateral: string;
 }
+type BaseContract = Contract<ContractAbi>;
 
+interface CollateralStatus {
+  isFullyCollateralized: boolean;
+  remainingCollateral: string;
+}
 
+interface Transaction {
+  chain: string;
+  type: string;
+  amount: number;
+  token: string;
+  status: string;
+  txHash: string;
+}
 
 export default function BorrowTab() {
-  const { account, OriginContract, web3,loanDetails,setLoanDetails } = useWeb3();
+  const { account, OriginContract, web3, loanDetails, setLoanDetails } = useWeb3();
 
   // State management
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [loanAmount, setLoanAmount] = useState(0);
-  const [loanDuration, setLoanDuration] = useState("30");
-  const [estimatedCollateral, setEstimatedCollateral] = useState(0);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [maticPrice, setMaticPrice] = useState(0);
-  const [ethPrice, setEthPrice] = useState(0);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [loanAmount, setLoanAmount] = useState<number>(0);
+  const [loanDuration, setLoanDuration] = useState<string>("30");
+  const [estimatedCollateral, setEstimatedCollateral] = useState<number>(0);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [maticPrice, setMaticPrice] = useState<number>(0);
+  const [ethPrice, setEthPrice] = useState<number>(0);
   const [priceError, setPriceError] = useState<string | null>(null);
-  const [collateralStatus, setCollateralStatus] = useState({
+  const [collateralStatus, setCollateralStatus] = useState<CollateralStatus>({
     isFullyCollateralized: false,
     remainingCollateral: '0'
   });
@@ -51,7 +64,7 @@ export default function BorrowTab() {
     if (!OriginContract || !account) return;
 
     try {
-      const details = await OriginContract.methods.getLoanDetails(account).call();
+      const details:any = await (OriginContract as BaseContract).methods.getLoanDetails(account).call();
       
       const parsedDetails: LoanDetails = {
         active: details[6],
@@ -64,9 +77,6 @@ export default function BorrowTab() {
       };
 
       setLoanDetails(parsedDetails);
-      
-
-      // Calculate collateral status
       await updateCollateralStatus(parsedDetails);
     } catch (error) {
       console.error('Error fetching loan details:', error);
@@ -78,10 +88,8 @@ export default function BorrowTab() {
     if (!OriginContract || !details.loanAmount) return;
 
     try {
-      const requiredCollateral = await OriginContract.methods.calculateRequiredCollateral(details.loanAmount).call();
+      const requiredCollateral = await (OriginContract as BaseContract).methods.calculateRequiredCollateral(details.loanAmount).call();
       const paidCollateral = details.paidCollateral || '0';
-      
-      
       setEstimatedCollateral(Number(requiredCollateral));
     } catch (error) {
       console.error('Error updating collateral status:', error);
@@ -95,8 +103,8 @@ export default function BorrowTab() {
       
       try {
         const [maticPriceData, ethPriceData] = await Promise.all([
-          OriginContract.methods.getMaticPrice().call(),
-          OriginContract.methods.getEthPrice().call()
+          (OriginContract as BaseContract).methods.getMaticPrice().call(),
+          (OriginContract as BaseContract).methods.getEthPrice().call()
         ]);
         
         setPriceError(null);
@@ -108,24 +116,22 @@ export default function BorrowTab() {
     };
 
     fetchPrices();
-    const interval = setInterval(fetchPrices, 30000); // Update prices every 30 seconds
+    const interval = setInterval(fetchPrices, 30000);
     return () => clearInterval(interval);
   }, [OriginContract]);
 
-  // Fetch loan details on mount and when account changes
   useEffect(() => {
     fetchLoanDetails();
   }, [account, OriginContract]);
 
-  // Handle loan amount changes
   useEffect(() => {
     const updateEstimatedCollateral = async () => {
       if (!OriginContract || !loanAmount) return;
       
       try {
-        const web3 = new Web3(window.ethereum);
-        const loanAmountWei = web3.utils.toWei(loanAmount.toString(), 'ether');
-        const required = await OriginContract.methods.calculateRequiredCollateral(loanAmountWei).call();
+        const web3Instance = new Web3(window.ethereum);
+        const loanAmountWei = web3Instance.utils.toWei(loanAmount.toString(), 'ether');
+        const required = await (OriginContract as BaseContract).methods.calculateRequiredCollateral(loanAmountWei).call();
         setEstimatedCollateral(Number(required));
       } catch (error) {
         console.error('Error calculating estimated collateral:', error);
@@ -133,31 +139,32 @@ export default function BorrowTab() {
     };
 
     updateEstimatedCollateral();
-  }, [loanAmount]);
+  }, [loanAmount, OriginContract]);
 
   const handleDepositCollateral = async () => {
-    if (!OriginContract || !account || !loanDetails) return;
+    if (!OriginContract || !account || !loanDetails || !web3) return;
   
     setIsProcessing(true);
     try {
-      const CurLoanDetails = await OriginContract.methods.getLoanDetails(account).call();
-      const requiredCollateral = await OriginContract.methods.calculateRequiredCollateral(Number(CurLoanDetails[1])).call();
-      const tx = await OriginContract.methods.depositCollateral().send({
+      const CurLoanDetails:LoanDetails = await (OriginContract as BaseContract).methods.getLoanDetails(account).call();
+      const requiredCollateral = await (OriginContract as BaseContract).methods.calculateRequiredCollateral(Number(CurLoanDetails?.loanAmount)).call();
+      const tx = await (OriginContract as BaseContract).methods.depositCollateral().send({
         from: account,
-        value: requiredCollateral
+        value: String(requiredCollateral)
       });
   
-      // Use the centralized transaction store
+      
+
       TransactionStore.saveTransaction({
         chain: 'sepolia',
         type: 'Deposit Collateral',
-        amount: Number(web3?.utils.fromWei(requiredCollateral, 'ether')),
+        amount: Number(web3.utils.fromWei(Number(requiredCollateral), 'ether')),
         token: 'ETH',
         status: 'completed',
         txHash: tx.transactionHash
       });
   
-      setLoanAmount(Number(CurLoanDetails[1]));
+      setLoanAmount(Number(CurLoanDetails.loanAmount));
       setCollateralStatus({ isFullyCollateralized: true, remainingCollateral: '0' });
       await fetchLoanDetails();
     } catch (error) {
@@ -171,7 +178,6 @@ export default function BorrowTab() {
     setIsModalOpen(true);
   };
 
-  // Calculate button states
   const canRequestLoan = !isProcessing && 
                         loanAmount > 0 && 
                         (!loanDetails?.active || collateralStatus.isFullyCollateralized);
@@ -237,14 +243,14 @@ export default function BorrowTab() {
               </SelectContent>
             </Select>
           </div>
-         {canDepositCollateral? <div className="space-y-2">
-            <Label>Required Collateral (ETH)</Label>
-            <p className="text-xl font-bold">
-              {web3?.utils.fromWei(estimatedCollateral.toString(), 'ether')} ETH
-            </p>
-            
-          </div>:<>
-          </>}
+          {canDepositCollateral && (
+            <div className="space-y-2">
+              <Label>Required Collateral (ETH)</Label>
+              <p className="text-xl font-bold">
+                {web3?.utils.fromWei(estimatedCollateral.toString(), 'ether')} ETH
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -316,7 +322,7 @@ export default function BorrowTab() {
             onClick={handleDepositCollateral}
             disabled={!canDepositCollateral}
           >
-            {isProcessing ? 'Processing...' : `Deposit Additional Collateral`}
+            {isProcessing ? 'Processing...' : 'Deposit Additional Collateral'}
           </Button>
         )}
       </div>

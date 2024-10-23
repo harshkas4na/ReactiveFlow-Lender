@@ -1,23 +1,8 @@
 "use client";
-// contexts/Web3Context.tsx
-import { createContext, useContext, useState, ReactNode } from 'react';
-import Web3, { Contract } from 'web3';
 
-// Define the context type
-interface Web3ContextType {
-  account: string;
-  web3: Web3 | null;
-  OriginContract: Contract | null;
-  DestinationContract: Contract | null;
-  loanDetails: LoanDetails | null;
-  setLoanDetails: (loanDetails: LoanDetails) => void;
-  setDestinationContract: (contract: Contract) => void;
-  MaticContract: Contract | null;
-  setMaticContract: (contract: Contract) => void;
-  setWeb3: (web3: Web3) => void;
-  setOriginContract: (contract: Contract) => void;
-  setAccount: (account: string) => void;
-}
+import { createContext, useContext, useState, ReactNode } from 'react';
+import Web3 from 'web3';
+import { Contract, ContractAbi } from 'web3';
 
 interface LoanDetails {
   active: boolean;
@@ -28,26 +13,39 @@ interface LoanDetails {
   duration: number;
   paidCollateral: string;
 }
-// Create the Web3 context with an undefined default value
+
+// Define a base contract interface that extends the Contract type
+type BaseContract = Contract<ContractAbi>;
+
+interface Web3ContextType {
+  account: string;
+  web3: Web3 | null;
+  OriginContract: BaseContract | null;
+  DestinationContract: BaseContract | null;
+  loanDetails: LoanDetails | null;
+  setLoanDetails: (loanDetails: LoanDetails | null) => void;
+  setDestinationContract: (contract: BaseContract | null) => void;
+  MaticContract: BaseContract | null;
+  setMaticContract: (contract: BaseContract | null) => void;
+  setWeb3: (web3: Web3 | null) => void;
+  setOriginContract: (contract: BaseContract | null) => void;
+  setAccount: (account: string) => void;
+}
+
+// Create the context with a default value matching the type
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
 
 interface Web3ProviderProps {
-  children: ReactNode; // Define the type for children prop
+  children: ReactNode;
 }
 
 export function Web3Provider({ children }: Web3ProviderProps) {
-  const [account, setAccount] = useState<string>(''); // Explicitly type the state
-  // Set Web3 provider
+  const [account, setAccount] = useState<string>('');
   const [web3, setWeb3] = useState<Web3 | null>(null);
-  // Set Origin contract
-  const [OriginContract, setOriginContract] = useState<Contract | null>(null);
-  // Set Destination contract
-  const [DestinationContract, setDestinationContract] = useState<Contract | null>(null);
-  // Set Matic contract
-  const [MaticContract, setMaticContract] = useState<Contract | null>(null);
+  const [OriginContract, setOriginContract] = useState<BaseContract | null>(null);
+  const [DestinationContract, setDestinationContract] = useState<BaseContract | null>(null);
+  const [MaticContract, setMaticContract] = useState<BaseContract | null>(null);
   const [loanDetails, setLoanDetails] = useState<LoanDetails | null>(null);
-
-
 
   const value: Web3ContextType = {
     account,
@@ -64,14 +62,18 @@ export function Web3Provider({ children }: Web3ProviderProps) {
     setAccount,
   };
 
-  return <Web3Context.Provider value={value}>{children}</Web3Context.Provider>;
+  return (
+    <Web3Context.Provider value={value}>
+      {children}
+    </Web3Context.Provider>
+  );
 }
 
-// Hook to use Web3 context
-export const useWeb3 = (): Web3ContextType => {
+// Custom hook to use the Web3 context
+export function useWeb3() {
   const context = useContext(Web3Context);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useWeb3 must be used within a Web3Provider');
   }
   return context;
-};
+}

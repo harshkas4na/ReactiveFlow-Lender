@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useWeb3 } from '../contexts/Web3Contexts'
 import TransactionStore from '../utils/transactionHistory'
 import { Transaction } from '../../types/transaction'
+import Web3 from 'web3'
 
 interface LoanDetails {
   id: number;
@@ -19,6 +20,20 @@ interface LoanDetails {
   status: 'Active' | 'Overdue' | 'Completed';
 }
 
+interface ContractLoanDetails {
+  0: string;  // amount
+  1: string;  // repaidAmount
+  2: string;  // interestRate
+  3: string;  // dueDate
+  4: string;  // creditScore
+  5: boolean; // active
+  6: boolean; // funded
+}
+
+interface TransactionError extends Error {
+  transactionHash?: string;
+}
+
 const RepayTab = () => {
   const [repayAmount, setRepayAmount] = useState('')
   const [activeLoans, setActiveLoans] = useState<LoanDetails[]>([])
@@ -28,22 +43,25 @@ const RepayTab = () => {
 
   const loadLoanDetails = async () => {
     try {
-      if (!account || !DestinationContract) {
+      if (!account || !DestinationContract || !web3) {
         console.log('Missing requirements:', { account, hasContract: !!DestinationContract });
         return;
       }
 
-      // Get loan details from contract
-      const loanDetails = await DestinationContract.methods.getLoanDetails(account).call();
+      const loanDetails: ContractLoanDetails = await DestinationContract.methods.getLoanDetails(account).call();
       console.log('Raw loan details:', loanDetails);
 
-      // Convert the array-like object to a proper array
-      const detailsArray = Object.values(loanDetails).slice(0, 7);
-      
-      const [amount, repaidAmount, interestRate, dueDate, creditScore, active, funded] = detailsArray;
+      const [amount, repaidAmount, interestRate, dueDate, creditScore, active, funded] = [
+        loanDetails[0],
+        loanDetails[1],
+        loanDetails[2],
+        loanDetails[3],
+        loanDetails[4],
+        loanDetails[5],
+        loanDetails[6]
+      ];
 
-      if (amount === undefined || repaidAmount === undefined || 
-          interestRate === undefined || dueDate === undefined) {
+      if (!amount || !repaidAmount || !interestRate || !dueDate) {
         console.error('Missing required loan details');
         throw new Error('Invalid loan details structure');
       }
@@ -104,7 +122,7 @@ const RepayTab = () => {
   }, [account, DestinationContract]);
 
   const handleRepay = async () => {
-    if (!repayAmount || Number(repayAmount) <= 0) {
+    if (!repayAmount || Number(repayAmount) <= 0 || !web3) {
       toast({
         title: "Invalid Amount",
         description: "Please enter a valid repayment amount",
@@ -118,13 +136,17 @@ const RepayTab = () => {
       const amountInWei = web3.utils.toWei(repayAmount, 'ether');
       console.log('Repaying amount in wei:', amountInWei);
 
+      if (!DestinationContract || !account) {
+        throw new Error('Contract or account not initialized');
+      }
+
       const tx = await DestinationContract.methods
         .repayLoan(amountInWei)
         .send({ from: account });
       
       console.log('Repayment transaction:', tx);
 
-      // Save transaction to store
+      
       TransactionStore.saveTransaction({
         chain: 'Kopli',
         type: 'Repay',
@@ -144,21 +166,23 @@ const RepayTab = () => {
     } catch (error) {
       console.error('Error repaying loan:', error);
 
-      // If the transaction was initiated but failed
-      if (error.transactionHash) {
+      // Handle transaction error
+      const txError = error as TransactionError;
+      if (txError.transactionHash) {
+        
         TransactionStore.saveTransaction({
           chain: 'Kopli',
           type: 'Repay',
           amount: Number(repayAmount),
           token: 'MATIC',
           status: 'pending',
-          txHash: error.transactionHash
+          txHash: txError.transactionHash
         });
       }
 
       toast({
         title: "Error",
-        description: error.message || "Failed to repay loan. Please try again.",
+        description: txError.message || "Failed to repay loan. Please try again.",
         variant: "destructive"
       });
     } finally {

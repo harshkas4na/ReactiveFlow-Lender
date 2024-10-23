@@ -21,7 +21,22 @@ import DESTINATION_ABI from './config/abi/DestinationContract_ABI.json';
 import ORIGIN_ABI from './config/abi/OriginContract_ABI.json';
 import Logo from './logo';
 
-const SUPPORTED_NETWORKS = {
+interface NetworkConfig {
+  chainId: number;
+  name: string;
+  rpcUrl: string;
+}
+
+interface Balances {
+  eth: string;
+  matic: string;
+}
+
+interface SupportedNetworks {
+  [key: string]: NetworkConfig;
+}
+
+const SUPPORTED_NETWORKS: SupportedNetworks = {
   SEPOLIA: {
     chainId: 11155111,
     name: 'Ethereum Sepolia',
@@ -34,8 +49,14 @@ const SUPPORTED_NETWORKS = {
   }
 };
 
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+
 export default function App() {
-  const [isDarkMode, setIsDarkMode] = useState(() => {
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('darkMode');
       return saved ? JSON.parse(saved) : window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -43,12 +64,12 @@ export default function App() {
     return true;
   });
   
-  const [selectedNetwork, setSelectedNetwork] = useState('');
-  const [chainId, setChainId] = useState(11155111);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [maticBalance, setMaticBalance] = useState('0.00');
-  const [balances, setBalances] = useState({
+  const [selectedNetwork, setSelectedNetwork] = useState<string>('');
+  const [chainId, setChainId] = useState<number>(11155111);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [maticBalance, setMaticBalance] = useState<string>('0.00');
+  const [balances, setBalances] = useState<Balances>({
     eth: '0.00',
     matic: '0.00'
   });
@@ -69,14 +90,13 @@ export default function App() {
     localStorage.setItem('darkMode', JSON.stringify(isDarkMode));
   }, [isDarkMode]);
 
-  const getCurrentNetworkKey = (currentChainId) => {
+  const getCurrentNetworkKey = (currentChainId: number): string => {
     return Object.keys(SUPPORTED_NETWORKS).find(
       key => SUPPORTED_NETWORKS[key].chainId === currentChainId
     ) || '';
   };
 
-  const initializeContracts = async (web3Instance, currentChainId) => {
-    // Clear all contracts first
+  const initializeContracts = async (web3Instance: Web3, currentChainId: number): Promise<void> => {
     setMaticContract(null);
     setDestinationContract(null);
     setOriginContract(null);
@@ -86,7 +106,6 @@ export default function App() {
         const maticContract = new web3Instance.eth.Contract(MATIC_ABI, MATIC_CONTRACT_ADDRESS);
         const destinationContract = new web3Instance.eth.Contract(DESTINATION_ABI, DESTINATION_CONTRACT_ADDRESS);
         
-        // Set contracts only after successful initialization
         setMaticContract(maticContract);
         setDestinationContract(destinationContract);
         console.log("Initialized Kopli contracts:", { maticContract, destinationContract });
@@ -104,11 +123,10 @@ export default function App() {
     }
   };
 
-  const updateBalances = async (address, web3Instance, currentChainId) => {
+  const updateBalances = async (address: string, web3Instance: Web3, currentChainId: number): Promise<void> => {
     if (!address || !web3Instance) return;
 
     try {
-      // Get native token balance
       const balance = await web3Instance.eth.getBalance(address);
       const formattedBalance = web3Instance.utils.fromWei(balance, 'ether');
       
@@ -117,10 +135,9 @@ export default function App() {
         eth: Number(formattedBalance).toFixed(4)
       }));
 
-      // Only fetch MATIC balance on Kopli network and when MaticContract is available
       if (currentChainId === SUPPORTED_NETWORKS.KOPLI.chainId && MaticContract) {
         try {
-          const maticBalance = await MaticContract.methods.balanceOf(address).call();
+          const maticBalance:Number = await MaticContract.methods.balanceOf(address).call();
           const formattedMaticBalance = web3Instance.utils.fromWei(maticBalance.toString(), 'ether');
           setMaticBalance(Number(formattedMaticBalance).toFixed(4));
           console.log('Updated MATIC balance:', formattedMaticBalance);
@@ -129,7 +146,6 @@ export default function App() {
           setMaticBalance('0.00');
         }
       } else {
-        // Reset MATIC balance when not on Kopli
         setMaticBalance('0.00');
       }
     } catch (error) {
@@ -137,14 +153,13 @@ export default function App() {
     }
   };
 
-  // Effect to update balances when account, chainId, or MaticContract changes
   useEffect(() => {
     if (account && web3 && chainId) {
       updateBalances(account, web3, chainId);
     }
-  }, [account, chainId, MaticContract]);
+  }, [account, chainId, MaticContract, web3]);
 
-  const connectWallet = async () => {
+  const connectWallet = async (): Promise<void> => {
     if (!window.ethereum) {
       setError('Please install MetaMask!');
       return;
@@ -161,15 +176,14 @@ export default function App() {
       if (accounts.length > 0) {
         setAccount(accounts[0]);
         const web3Instance = new Web3(window.ethereum);
-        const chainId = await web3Instance.eth.getChainId();
+        const chainId = Number(await web3Instance.eth.getChainId());
         setChainId(chainId);
         setSelectedNetwork(getCurrentNetworkKey(chainId));
         
-        // Initialize contracts before updating balances
         await initializeContracts(web3Instance, chainId);
         await updateBalances(accounts[0], web3Instance, chainId);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error connecting wallet:', error);
       setError(error.message);
     } finally {
@@ -177,7 +191,7 @@ export default function App() {
     }
   };
 
-  const switchNetwork = async (networkName) => {
+  const switchNetwork = async (networkName: string): Promise<void> => {
     try {
       setIsLoading(true);
       const network = SUPPORTED_NETWORKS[networkName.toUpperCase()];
@@ -190,7 +204,7 @@ export default function App() {
           method: 'wallet_switchEthereumChain',
           params: [{ chainId: chainIdHex }],
         });
-      } catch (switchError) {
+      } catch (switchError: any) {
         if (switchError.code === 4902) {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
@@ -212,11 +226,10 @@ export default function App() {
       const currentChainId = await web3Instance.eth.getChainId();
       setChainId(Number(currentChainId));
       
-      // Initialize contracts before updating balances
-      await initializeContracts(web3Instance, currentChainId);
+      await initializeContracts(web3Instance, Number(currentChainId));
       
       if (account) {
-        await updateBalances(account, web3Instance, currentChainId);
+        await updateBalances(account, web3Instance, Number(currentChainId));
       }
     } catch (error) {
       console.error('Error switching network:', error);
@@ -226,34 +239,32 @@ export default function App() {
     }
   };
 
-  // Initialize Web3 and contracts on component mount
   useEffect(() => {
     if (window.ethereum) {
       connectWallet();
-      initializeContracts(web3, chainId);
       const web3Instance = new Web3(window.ethereum);
       setWeb3(web3Instance);
 
       web3Instance.eth.getChainId().then(async (currentChainId) => {
-        setChainId(currentChainId);
-        const networkKey = getCurrentNetworkKey(currentChainId);
+        setChainId(Number(currentChainId));
+        const networkKey = getCurrentNetworkKey(Number(currentChainId));
         setSelectedNetwork(networkKey);
-        await initializeContracts(web3Instance, currentChainId);
+        await initializeContracts(web3Instance, Number(currentChainId));
       });
 
       web3Instance.eth.getAccounts().then(async (accounts) => {
         if (accounts.length > 0) {
           setAccount(accounts[0]);
           const currentChainId = await web3Instance.eth.getChainId();
-          await updateBalances(accounts[0], web3Instance, currentChainId);
+          await updateBalances(accounts[0], web3Instance, Number(currentChainId));
         }
       });
 
-      const handleAccountsChanged = async (accounts) => {
+      const handleAccountsChanged = async (accounts: string[]) => {
         if (accounts.length > 0) {
           setAccount(accounts[0]);
           const currentChainId = await web3Instance.eth.getChainId();
-          await updateBalances(accounts[0], web3Instance, currentChainId);
+          await updateBalances(accounts[0], web3Instance, Number(currentChainId));
         } else {
           setAccount('');
           setBalances({ eth: '0.00', matic: '0.00' });
@@ -261,7 +272,7 @@ export default function App() {
         }
       };
 
-      const handleChainChanged = async (newChainId) => {
+      const handleChainChanged = async (newChainId: string) => {
         const chainIdDecimal = parseInt(newChainId, 16);
         setChainId(chainIdDecimal);
         const networkKey = getCurrentNetworkKey(chainIdDecimal);
@@ -286,14 +297,15 @@ export default function App() {
     setIsDarkMode(prev => !prev);
   };
 
-  const formatAddress = (address) => {
+  const formatAddress = (address: string): string => {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
 
-  const getNetworkName = () => {
+  const getNetworkName = (): string => {
     const currentNetwork = getCurrentNetworkKey(chainId);
     return currentNetwork ? SUPPORTED_NETWORKS[currentNetwork].name : "Unknown Network";
   };
+
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark' : ''}`}>
       <div className="bg-background text-foreground">
