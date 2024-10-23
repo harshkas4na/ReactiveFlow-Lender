@@ -64,7 +64,7 @@ export default function BorrowTab() {
     if (!OriginContract || !account) return;
 
     try {
-      const details:any = await (OriginContract as BaseContract).methods.getLoanDetails(account).call();
+      const details = await (OriginContract as BaseContract).methods.getLoanDetails(account).call();
       
       const parsedDetails: LoanDetails = {
         active: details[6],
@@ -146,8 +146,8 @@ export default function BorrowTab() {
   
     setIsProcessing(true);
     try {
-      const CurLoanDetails:LoanDetails = await (OriginContract as BaseContract).methods.getLoanDetails(account).call();
-      const requiredCollateral = await (OriginContract as BaseContract).methods.calculateRequiredCollateral(Number(CurLoanDetails?.loanAmount)).call();
+      const CurLoanDetails = await (OriginContract as BaseContract).methods.getLoanDetails(account).call();
+      const requiredCollateral:number = await (OriginContract as BaseContract).methods.calculateRequiredCollateral(Number(CurLoanDetails[1])).call();
       const tx = await (OriginContract as BaseContract).methods.depositCollateral().send({
         from: account,
         value: String(requiredCollateral)
@@ -158,13 +158,13 @@ export default function BorrowTab() {
       TransactionStore.saveTransaction({
         chain: 'sepolia',
         type: 'Deposit Collateral',
-        amount: Number(web3.utils.fromWei(Number(requiredCollateral), 'ether')),
+        amount: Number(web3.utils.fromWei(requiredCollateral, 'ether')),
         token: 'ETH',
         status: 'completed',
         txHash: tx.transactionHash
       });
   
-      setLoanAmount(Number(CurLoanDetails.loanAmount));
+      setLoanAmount(Number(CurLoanDetails[1]));
       setCollateralStatus({ isFullyCollateralized: true, remainingCollateral: '0' });
       await fetchLoanDetails();
     } catch (error) {
